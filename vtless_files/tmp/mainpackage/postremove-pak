@@ -1,0 +1,37 @@
+#! /bin/bash
+#    Copyright (c) 2026
+#
+#    This file is part of VTless.
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+if [[ $1 == upgrade ]]
+then
+  exit
+fi
+
+#1 argument: The first argument is the file to stop diverting
+function UndivertDpkgFile
+{
+  SourceFile="$1"
+
+  DivertPackage=$(dpkg-divert --listpackage "$SourceFile")
+  if [[ "$DivertPackage" == "$DPKG_MAINTSCRIPT_PACKAGE" ]]
+  then
+    dpkg-divert --remove --rename "$SourceFile"
+  fi
+}
+
+UndivertDpkgFile /usr/bin/plymouth
+UndivertDpkgFile /usr/bin/chvt

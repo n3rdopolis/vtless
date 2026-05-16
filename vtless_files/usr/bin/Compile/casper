@@ -1,0 +1,118 @@
+#! /bin/bash
+#    Copyright (c) 2026
+#
+#    This file is part of VTless.
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#Inherit functions and variables from the script in /usr/bin/build_core
+. /usr/bin/build_core
+
+#The name of the source code folder that gets created
+SOURCENAME=casper
+
+#The URL of the Source code repo
+SOURCEURL=https://git.launchpad.net/ubuntu/+source/casper
+
+#The Type of repository the source code is on. Either 'GIT', 'SVN', 'BZR', 'HG', or 'ARCHIVE'.
+REPOSITORYTYPE=GIT
+
+#The revision of the source repo to use. To get the lastest revision for GIT it's 'git:defaultbranch', for SVN it's 'HEAD', for BZR, it's 'last:1', and for HG it's 'default', without the quotes. ARCHIVE doesn't have revisions
+SOURCEREVISION=ubuntu/lunar
+
+#The prefix to compile and install the source code to
+INSTALLDIR=/opt
+
+#This variable is not manditory, /usr/bin/build_core sets it by default as 0, so that when it's set to create deb files, it only needs to build them once. 
+REBUILDNEWREVISION=0
+
+#Specify any custom revisions for git submodules in the format shown below
+# SUBMODULEREVISIONS=(examplesubmodule master 
+# nested/submodule 1.0
+# 'submodule with spaces' master
+# commitsubmodule 0123456789abcdef )
+#
+#This is an array where the first element specifies a submodule name, and the second element specifies the revision, the third specifies the name of another submodule, the fourth element specifies its revision and so on.
+#If there are spaces in the submodule your are specifing, you will need to enclose the name in single quotes
+#This is only applicable to git repositories with submodules
+
+#VARIABLES PRESENTED
+# EXTERNALBUILDHOME : For out of tree builds 
+# INTERNALBUILDHOME : For in tree builds
+
+#This gets called by DownloadSource in /usr/bin/build_core. If there are no other commands here, the colon (:) is MANDITORY as a NULL command, otherwise Bash complains of an empty function. These functions are custom commands that need to be done to download source.
+function PackageDownloadSource
+{
+:
+}
+
+
+#This is called by PrepareBuild in /usr/bin/build_core. If there are no other commands here, the colon (:) is MANDITORY as a NULL command, otherwise Bash complains of an empty function. These functions are custom commands that need to be done to prepare the system to build the source
+function PackagePrepareBuild()
+{
+#Casper's scripts overrides the PATH set in the initramfs /init script, add the $INSTALLDIR/bin and $INSTALLDIR/sbin back
+sed -i "s|export PATH=|export PATH=$INSTALLDIR/bin:$INSTALLDIR/sbin:|" scripts/casper
+
+echo "#! /bin/bash"$'\n'"if [[ (\$1 == purge) && (-e /etc/casper.conf) ]]"$'\n'"then"$'\n'"rm /etc/casper.conf"$'\n'"fi"  > postremove-pak
+
+sed -i "s|/usr/share/kubuntu-default-settings/kf5-settings/|/etc/skel/.config/|g" scripts/casper-bottom/34disable_kde_services
+sed -i "s|/usr/|$INSTALLDIR/|g" scripts/casper-bottom/34disable_kde_services
+mv scripts/casper-bottom/34disable_kde_services scripts/casper-bottom/24disable_kde_services
+sed -i "s@/usr/share/applications/ubiquity.desktop /usr/share/applications/kde4/ubiquity-kdeui.desktop@$INSTALLDIR/share/applications/calamares.desktop@g" scripts/casper-bottom/25adduser
+sed -i 's/overlayfs/overlay/g' hooks/casper
+sed -i '/manual_add_modules aufs/d' hooks/casper
+sed -i '/manual_add_modules unionfs/d' hooks/casper
+sed -i '/manual_add_modules unionfs/d' scripts/casper
+sed -i 's/^    setup_auto_log_persistence$//g' scripts/casper
+patch -f --no-backup-if-mismatch -p1 < /usr/share/VTLESS_PATCHES/casper.diff
+rm scripts/casper-bottom/22sslcert #WORKAROUND
+rm scripts/casper-bottom/41apt_cdrom
+sed -i "s|/root$INSTALLDIR/share/autostart/trackerd.desktop|$INSTALLDIR/etc/xdg/autostart/tracker-store.desktop|g" scripts/casper-bottom/36disable_trackerd
+sed -i '/db_set passwd\/username "$USERNAME"/a db_set passwd/user-default-groups string adm cdrom dip lpadmin plugdev sambashare debian-tor libvirtd sudo users' scripts/casper-bottom/25adduser
+sed -i '/casper.conf/d' debian/casper.install
+}
+
+#This is called by MakeAndInstall in /usr/bin/build_core, when the PWD is in the source tree. The commands should build the source 
+function PackageCompileSource()
+{
+make 
+}
+
+#This is called by MakeAndInstall in /usr/bin/build_core. This is the routine to install the source. The PWD does not get inherited from PackageCompileSource, so if needed, the PWD needs to be changed here too.
+function PackageInstallSource()
+{
+chmod +x scripts/casper-bottom/*
+cat debian/*.install | while read -r LINE
+do 
+echo "DOING $LINE"
+  FILECOPY=($LINE)
+  Iterator=0
+  DEST="/${FILECOPY[${#FILECOPY[@]} -1]}"
+  for (( Iterator = 0; Iterator < (( ${#FILECOPY[@]} -1 )); Iterator++ ))
+  do
+    SRC="./${FILECOPY[$Iterator]}"
+    mkdir -p "$DEST"
+    cp -r --preserve=mode,links,timestamps "$SRC" "$DEST"
+  done
+done
+}
+
+#This is called by MakeAndInstall in /usr/bin/build_core. If there are no other commands here, the colon (:) is MANDITORY as a NULL command, otherwise Bash complains of an empty function. These commands are custom install commands that are needed for this package that are not performed by the source install operation. 
+function PackagePostInstall()
+{
+:
+}
+
+#Run the Build and or Download, based on the argument this script was called by. This is decided within /usr/bin/build_core
+RunDownloadAndOrBuild

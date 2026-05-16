@@ -1,0 +1,98 @@
+#! /bin/bash
+#    Copyright (c) 2026
+#
+#    This file is part of VTless.
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#Require root privlages
+if [[ $UID != 0 ]]
+then
+  echo "Must be run as root."
+  exit
+fi
+
+shopt -s dotglob
+
+#This file is used by checkinstall for creating the main package that has all of the installed SVN files
+
+export DEBIAN_DISTRO=$(awk '{print $1}' /etc/issue)
+
+#Build the exclusion list
+IFS=$'\n'
+ExcludedFiles=($(cat /tmp/mainpackage/EXCLUDEFILES.txt))
+unset IFS
+
+RSyncExcludeArgs=()
+for ExcludedFile in "${ExcludedFiles[@]}"
+do
+  ExcludePath=$(realpath --relative-to=/ "$ExcludedFile")\
+  RSyncExcludeArgs+=(--exclude="$ExcludePath")
+done
+
+#Copy select files into place
+rsync ${RSyncExcludeArgs[@]} -Ia /tmp/import/ /
+
+
+#Configure python to use modules in /opt
+echo "/opt/lib/python3/dist-packages" >> "/usr/lib/python3/dist-packages/optpkgs.pth"
+PYTHON3DIRS=$(find /usr/lib/python3* -maxdepth 0 -printf "%f\n")
+for PYTHON3DIR in $PYTHON3DIRS
+do
+echo "/opt/lib/$PYTHON3DIR/site-packages" >> "/usr/lib/python3/dist-packages/optpkgs.pth"
+done
+
+#Add libraries under /opt to the ldconfig cache, for setcap'ed binaries
+echo /opt/lib >> /etc/ld.so.conf.d/aa_${PACKAGESUFFIX}_opt_libs.conf
+echo /opt/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null) >> /etc/ld.so.conf.d/aa_${PACKAGESUFFIX}_opt_libs.conf
+
+#Add /opt/bin to the system PATH
+mkdir -p /usr/lib/systemd/system-environment-generators/
+echo -e "#!/bin/bash\necho PATH=\"/opt/bin:/opt/sbin:\$PATH\"" >> /usr/lib/systemd/system-environment-generators/optbin
+chmod +x /usr/lib/systemd/system-environment-generators/optbin
+echo -e "#!/bin/bash\necho PATH=\"/opt/bin:/opt/sbin:\$PATH\"" >> /usr/lib/systemd/user-environment-generators/optbin
+chmod +x /usr/lib/systemd/user-environment-generators/optbin
+
+#save the build date of the CD.
+date -u +"%A, %Y-%m-%d %H:%M:%S %Z" > /etc/builddate
+
+if [[ $DEBIAN_DISTRO == Debian ]]
+then
+  echo "blacklist pcspkr" > /etc/modprobe.d/nobeep.conf
+fi
+echo "blacklist udlfb" > /etc/modprobe.d/udlkmsonly.conf
+echo "blacklist evbug" > /etc/modprobe.d/evbug.conf
+
+#Create a python path
+mkdir -p /opt/lib/$(readlink /usr/bin/python3)/site-packages/
+
+#Create a /opt/var/log folder
+mkdir -p /opt/var/log
+
+#Create a link to plymouth
+ln -sf /opt/bin/plymouth /usr/bin/plymouth
+
+#Create sbin symlinks
+if [[ ! -e /usr/sbin/auto_simpledrm_fallback ]]
+then
+  ln -s /usr/bin/auto_simpledrm_fallback /usr/sbin/auto_simpledrm_fallback
+fi
+
+if [[ ! -e /usr/sbin/recinit ]]
+then
+  ln -s /usr/bin/recinit /usr/sbin/recinit
+fi
+
+#Link /opt/sbin to /opt/bin, systemd recommends merged /sbin and /bin now. 
+ln -s ./bin /opt/sbin

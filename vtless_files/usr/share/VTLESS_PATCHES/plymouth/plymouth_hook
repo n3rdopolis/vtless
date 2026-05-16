@@ -1,0 +1,308 @@
+#!/bin/sh
+#This file has been modified from Debian's plymouth hook to suit installs under /opt
+
+set -e
+
+PREREQ=""
+
+prereqs()
+{
+        echo "${PREREQ}"
+}
+
+case "${1}" in
+        prereqs)
+                prereqs
+                exit 0
+                ;;
+esac
+
+. /usr/bin/wlruntime_vars
+. /usr/share/initramfs-tools/hook-functions
+
+if [ -e /usr/share/X11/xkb ]
+then
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/"
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/compat/"
+
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/keycodes/"
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/rules/"
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/symbols/"
+  mkdir -p "${DESTDIR}/usr/share/X11/xkb/types/"
+  cp -Z /usr/share/X11/xkb/compat/accessx ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/basic ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/caps ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/complete ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/iso9995 ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/ledcaps ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/lednum ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/ledscroll ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/level5 ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/misc ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/mousekeys ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/compat/xfree86 ${DESTDIR}/usr/share/X11/xkb/compat/
+  cp -Z /usr/share/X11/xkb/keycodes/aliases ${DESTDIR}/usr/share/X11/xkb/keycodes/
+  cp -Z /usr/share/X11/xkb/keycodes/evdev ${DESTDIR}/usr/share/X11/xkb/keycodes/
+  cp -Z /usr/share/X11/xkb/rules/evdev ${DESTDIR}/usr/share/X11/xkb/rules/
+  find /usr/share/X11/xkb/symbols -maxdepth 1 ! -type d | while read -r file
+  do
+    cp -Z $file ${DESTDIR}/usr/share/X11/xkb/symbols/
+  done
+  cp -Z /usr/share/X11/xkb/types/basic ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/complete ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/extra ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/iso9995 ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/level5 ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/mousekeys ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/numpad ${DESTDIR}/usr/share/X11/xkb/types/
+  cp -Z /usr/share/X11/xkb/types/pc ${DESTDIR}/usr/share/X11/xkb/types/
+fi
+
+if [ -e /usr/share/X11/locale ]
+then
+  mkdir -p "${DESTDIR}/usr/share/X11/locale/"
+  # In the off chance the user uses their compose key in initrd
+  if [ -f "/usr/share/X11/locale/compose.dir" ]
+  then
+    cp -Z /usr/share/X11/locale/compose.dir ${DESTDIR}/usr/share/X11/locale/
+    grep UTF-8/Compose: /usr/share/X11/locale/compose.dir | awk -F: '{ print $1 }' | sort -u | xargs dirname | while read -r DIR
+    do
+      mkdir -p ${DESTDIR}/usr/share/X11/locale/$DIR
+      find /usr/share/X11/locale/$DIR -maxdepth 1 ! -type d | while read -r file
+      do
+        cp -Z $file ${DESTDIR}/usr/share/X11/locale/$DIR
+      done
+    done
+  fi
+fi
+
+THEME="$(/opt/sbin/plymouth-set-default-theme || true)"
+THEMES="/opt/share/plymouth/themes"
+
+if [ -n "${THEME}" ]
+then
+        THEME_NAME="${THEME}"
+        THEME="${THEMES}/${THEME}/${THEME}.plymouth"
+        IMAGE_DIR=$(grep "ImageDir *= *" ${THEME} | sed 's/ImageDir *= *//')
+
+        PLYMOUTH_FONT_PATH=""
+        PLYMOUTH_FONT=$(grep "\bFont *= *" ${THEME} | sed 's/Font *= *//' | head -1)
+        if [ ! -z "$PLYMOUTH_FONT" ]; then
+                PLYMOUTH_FONT_PATH=$(fc-match -f %{file} "$PLYMOUTH_FONT")
+                if [ ! -z "$PLYMOUTH_FONT_PATH" ]; then
+                        copy_exec "$PLYMOUTH_FONT_PATH"
+                fi
+        fi
+
+        PLYMOUTH_TITLE_FONT_PATH=""
+        PLYMOUTH_TITLE_FONT=$(grep "\bTitleFont *= *" ${THEME} | sed 's/TitleFont *= *//' | head -1)
+        if [ ! -z "$PLYMOUTH_TITLE_FONT" ]; then
+                PLYMOUTH_TITLE_FONT_PATH=$(fc-match -f %{file} "$PLYMOUTH_TITLE_FONT")
+                if [ ! -z "$PLYMOUTH_TITLE_FONT_PATH" ]; then
+                        copy_exec "$PLYMOUTH_TITLE_FONT_PATH"
+                fi
+        fi
+
+        PLYMOUTH_MONOSPACE_FONT_PATH=""
+        PLYMOUTH_MONOSPACE_FONT=$(grep "\bMonospaceFont *= *" ${THEME} | sed 's/MonospaceFont *= *//' | head -1)
+        if [ ! -z "$PLYMOUTH_MONOSPACE_FONT" ]; then
+                PLYMOUTH_MONOSPACE_FONT_PATH=$(fc-match -f %{file} "$PLYMOUTH_MONOSPACE_FONT")
+                if [ ! -z "$PLYMOUTH_MONOSPACE_FONT_PATH" ]; then
+                        copy_exec "$PLYMOUTH_MONOSPACE_FONT_PATH"
+                fi
+                PLYMOUTH_BOLD_MONOSPACE_FONT_PATH=$(fc-match -f %{file} "$PLYMOUTH_MONOSPACE_FONT":weight=bold)
+                if [ ! -z "$PLYMOUTH_BOLD_MONOSPACE_FONT_PATH" ]; then
+                        copy_exec "$PLYMOUTH_BOLD_MONOSPACE_FONT_PATH"
+                fi
+
+        fi
+else
+        exit 0
+fi
+
+PLUGIN_PATH="$(plymouth --get-splash-plugin-path)"
+
+case "${THEME_NAME}" in
+        text|details|tribar)
+                PLUGINS="text.so details.so"
+                ;;
+
+        *)
+                PLUGINS="text.so details.so label-pango.so label-freetype.so"
+                ;;
+esac
+
+MODULE="${PLUGIN_PATH}/$(sed -n 's/^ModuleName=\(.*\)/\1/p' ${THEME}).so"
+
+if [ ! -e "$MODULE" ]
+then
+        echo "W: plymouth module ($MODULE) missing, skipping plymouth."
+        exit 0
+fi
+
+# copy plugin and images for current theme
+copy_exec "${MODULE}"
+mkdir -p "${DESTDIR}/${THEMES}"
+cp -r "${THEMES}/${THEME_NAME}" "${DESTDIR}/${THEMES}"
+
+if [ -n "${IMAGE_DIR}" ] && [ "${THEMES}/${THEME_NAME}" != "${IMAGE_DIR}" ]
+then
+        cp -r "${IMAGE_DIR}" "${DESTDIR}/${THEMES}"
+fi
+
+# copy binaries and base plugins
+copy_exec /opt/bin/plymouth
+cp /opt/sbin/plymouthd ${DESTDIR}/opt/bin/plymouthd
+copy_exec /opt/libexec/plymouth/plymouthd-fd-escrow
+
+ln -sf /opt/bin/plymouth ${DESTDIR}/bin/plymouth
+ln -sf /opt/bin/plymouth ${DESTDIR}/usr/bin/plymouth
+if [ ! -e ${DESTDIR}/sbin/plymouthd ]
+then
+        ln -sf /opt/sbin/plymouthd ${DESTDIR}/sbin/plymouthd
+fi
+if [ ! -e ${DESTDIR}/usr/sbin/plymouthd ]
+then
+        ln -sf /opt/sbin/plymouthd ${DESTDIR}/usr/sbin/plymouthd
+fi
+
+for PLUGIN in ${PLUGINS}
+do
+        if [ -f ${PLUGIN_PATH}/${PLUGIN} ]
+        then
+                copy_exec ${PLUGIN_PATH}/${PLUGIN}
+        else
+                echo "W: plymouth: The plugin ${PLUGIN} is missing, the selected theme might not work as expected."
+                echo "W: plymouth: You might want to install the plymouth-themes package to fix this."
+        fi
+done
+
+# copy base themes and logo
+cp -aZ "${THEMES}/details" "${DESTDIR}/${THEMES}"
+cp -aZ "${THEMES}/text" "${DESTDIR}/${THEMES}"
+
+if [ -f /etc/os-release ]
+then
+        cp /etc/os-release "${DESTDIR}/etc"
+fi
+
+case "${THEME_NAME}" in
+        text|details)
+
+                ;;
+
+        *)
+                if [ -e /opt/share/plymouth/boot_logo.png ]
+                then
+                  mkdir -p "${DESTDIR}/opt/share/plymouth"
+                  cp -L /opt/share/plymouth/boot_logo.png "${DESTDIR}/opt/share/plymouth"
+                fi
+
+                # fontconfig
+                mkdir -p "${DESTDIR}/etc/fonts/conf.d"
+                cp -aZ /etc/fonts/fonts.conf "${DESTDIR}/etc/fonts"
+                cp -rL /etc/fonts/conf.d/60-latin.conf "${DESTDIR}/etc/fonts/conf.d"
+                mkdir -p "${DESTDIR}/var/cache/fontconfig"
+                # This is only needed because fc-cache bellow fails if the directory doesn't exist
+                mkdir -p "${DESTDIR}/usr/local/share/fonts"
+
+                # fonts-dejavu
+                if [ -e /usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf ]
+                then
+                        mkdir -p "${DESTDIR}/usr/share/fonts/truetype/dejavu"
+                        cp -aZ /usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf "${DESTDIR}/usr/share/fonts/truetype/dejavu"
+                        cp -aZ /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf  "${DESTDIR}/usr/share/fonts/truetype/dejavu"
+                        cp -aZ /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf  "${DESTDIR}/usr/share/fonts/truetype/dejavu"
+                fi
+
+                font=$(fc-match -f %{file})
+                monospacedfont=$(fc-match -f %{file} monospace)
+                cp -aZ "$font" "${DESTDIR}/usr/share/fonts/Plymouth.ttf"
+                cp -aZ "$monospacedfont" "${DESTDIR}/usr/share/fonts/Plymouth-monospace.ttf"
+
+                case "${THEME_NAME}" in
+                        spinner|bgrt)
+                                # ATM, this is needed by the spinner and bgrt themes
+                                if [ -e /usr/share/fonts/opentype/cantarell/Cantarell-Regular.otf ]
+                                then
+                                        mkdir -p "${DESTDIR}/usr/share/fonts/opentype/cantarell"
+                                        cp -aZ /usr/share/fonts/opentype/cantarell/Cantarell-Regular.otf "${DESTDIR}/usr/share/fonts/opentype/cantarell"
+                                        cp -aZ /usr/share/fonts/opentype/cantarell/Cantarell-Light.otf "${DESTDIR}/usr/share/fonts/opentype/cantarell"
+                                fi
+                                # We continue to the default case here
+                                ;;
+                esac
+                fc-cache -s -y "${DESTDIR}" > /dev/null 2>&1
+
+                # copy /etc/default/keyboard (needed for keymap detection)
+                if [ -e /etc/default/keyboard ]
+                then
+                        mkdir -p "${DESTDIR}/etc/default"
+                        cp /etc/default/keyboard "${DESTDIR}/etc/default"
+                fi
+
+                # for two-step
+                case "$(sed -n 's/^ModuleName=\(.*\)/\1/p' ${THEME})" in
+                        two-step)
+                                # add watermark.png
+                                logo=/usr/share/desktop-base/debian-logos/logo-text-version-64.png
+                                if [ -e $logo ]
+                                then
+                                        cp $logo "${DESTDIR}/${IMAGE_DIR}/watermark.png"
+                                fi
+                                ;;
+                esac
+                ;;
+esac
+
+#Add evdev module
+manual_add_modules evdev
+
+# copy renderers
+copy_exec $PLUGIN_PATH/renderers/frame-buffer.so
+copy_exec $PLUGIN_PATH/renderers/drm.so
+
+# handle keymap config
+#default value
+XKBLAYOUT=us
+if [ -f /etc/default/keyboard ]
+then
+        . /etc/default/keyboard
+fi
+if [ -f /etc/vconsole.conf ]
+then
+        . /etc/vconsole.conf
+        cp /etc/vconsole.conf "${DESTDIR}/etc"
+fi
+echo "XKBLAYOUT=\"$XKBLAYOUT\"" >> "${DESTDIR}/etc/vconsole.conf"
+echo "XKBMODEL=\"$XKBMODEL\"" >> "${DESTDIR}/etc/vconsole.conf"
+echo "XKBVARIANT=\"$XKBVARIANT\"" >> "${DESTDIR}/etc/vconsole.conf"
+echo "XKBOPTIONS=\"$XKBOPTIONS\"" >> "${DESTDIR}/etc/vconsole.conf"
+
+mkdir -p "${DESTDIR}/opt/etc/plymouth"
+
+if [ -r /opt/etc/plymouth/plymouthd.conf ]
+then
+        cp -aZ /opt/etc/plymouth/plymouthd.conf "${DESTDIR}/opt/etc/plymouth/"
+fi
+
+cp -aZ /opt/share/plymouth/plymouthd.defaults "${DESTDIR}/opt/share/plymouth/"
+
+# temporarily include dummy root account lookup (#691598)
+if ! grep -qs '^root:' "${DESTDIR}/etc/passwd"
+then
+        echo "root:x:0:0:root:/root:/bin/sh" >> "${DESTDIR}/etc/passwd"
+fi
+
+if ! grep -qs '^passwd: files' "${DESTDIR}/etc/nsswitch.conf"
+then
+        echo "passwd: files" >> "${DESTDIR}/etc/nsswitch.conf"
+fi
+
+for _LIBRARY in /lib/$DEB_HOST_MULTIARCH/libnss_files*
+do
+        if [ -e "${_LIBRARY}" ]
+        then
+                copy_exec "${_LIBRARY}"
+        fi
+done

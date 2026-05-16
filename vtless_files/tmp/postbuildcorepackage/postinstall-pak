@@ -1,0 +1,42 @@
+#! /bin/bash
+#    Copyright (c) 2026
+#
+#    This file is part of VTless.
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+#Run once postinstall actions
+#The second argument is NULL the first time the package is installed or configured
+if [[ -z $2 ]]
+then
+  #configure grub color
+  echo "set color_normal=black/black" >> /boot/grub/custom.cfg
+
+  #enable the virtual tty services.
+  systemctl enable vtty-frontend-vt@.service
+  ln -s /usr/lib/systemd/system/vtty-frontend-vt@.service /etc/systemd/system/autovt@.service
+
+  #Enable the auto simpledrm fallback detector
+  systemctl enable auto_simpledrm_fallback.service
+
+  #Enable the recinit services for systemd's recovery shells
+  systemctl enable recinit-rescue.service
+  systemctl enable recinit-emergency.service
+
+  #Force initramfs utilites to include the overlay filesystem
+  echo overlay >> /etc/initramfs-tools/modules
+
+  systemctl enable vtty-seatmanager.service
+fi
